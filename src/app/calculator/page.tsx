@@ -8,8 +8,10 @@ export default function CalculatorPage() {
   const [premium, setPremium] = useState<number | null>(null);
   const [rate, setRate] = useState<number | null>(null);
 
+  const MAX_CAR_VALUE = 100_000_000;
+
   const calculatePremium = () => {
-    if (carValue === "" || carValue <= 0) {
+    if (carValue === "" || carValue <= 0 || carValue > MAX_CAR_VALUE) {
       setPremium(null);
       setRate(null);
       return;
@@ -25,12 +27,20 @@ export default function CalculatorPage() {
     setPremium(carValue * selectedRate);
   };
 
-  // Descriptions for coverage options
+  const resetCalculator = () => {
+    setCarValue("");
+    setCoverageType("comprehensive");
+    setPremium(null);
+    setRate(null);
+  };
+
   const coverageDescriptions: Record<string, string> = {
     comprehensive: "Full coverage: damage, fire, theft, and third-party liability.",
     "third-party": "Covers only damage or injury you cause to others.",
     "fire-theft": "Covers fire damage and theft, not collision or third-party.",
   };
+
+  const isValidInput = carValue !== "" && carValue > 0 && carValue <= MAX_CAR_VALUE;
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
@@ -47,9 +57,10 @@ export default function CalculatorPage() {
           <input
             type="number"
             value={carValue}
-            onChange={(e) =>
-              setCarValue(e.target.value === "" ? "" : Number(e.target.value))
-            }
+            onChange={(e) => {
+              const value = e.target.value === "" ? "" : Number(e.target.value);
+              if (value === "" || (value >= 0 && value <= MAX_CAR_VALUE)) setCarValue(value);
+            }}
             placeholder="Enter car value"
             className="w-full border border-gray-300 rounded-lg p-2 
                        focus:ring-2 focus:ring-blue-500 focus:outline-none 
@@ -78,25 +89,33 @@ export default function CalculatorPage() {
           </p>
         </div>
 
-        {/* Calculate Button */}
-        <button
-          onClick={calculatePremium}
-          className="w-full bg-blue-600 text-white font-medium p-3 rounded-lg 
-                     hover:bg-blue-700 transition-colors"
-        >
-          Calculate Premium
-        </button>
+        {/* Buttons */}
+        <div className="flex gap-4">
+          <button
+            onClick={calculatePremium}
+            disabled={!isValidInput}
+            className={`flex-1 bg-blue-600 text-white font-medium p-3 rounded-lg 
+                        hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            Calculate Premium
+          </button>
+          <button
+            onClick={resetCalculator}
+            className="flex-1 bg-gray-300 text-gray-800 font-medium p-3 rounded-lg 
+                       hover:bg-gray-400 transition-colors"
+          >
+            Reset
+          </button>
+        </div>
 
         {/* Result + Breakdown */}
         {premium !== null && rate !== null && (
           <div className="mt-6 bg-blue-50 p-4 rounded-lg border border-blue-200 text-center">
             <p className="text-lg font-semibold text-gray-800 mb-2">
-              Estimated Premium:{" "}
-              <span className="text-green-600">${premium.toFixed(2)}</span>
+              Estimated Premium: <span className="text-green-600">${premium.toFixed(2)}</span>
             </p>
             <p className="text-sm text-gray-600">
-              Breakdown: Car Value (${carValue}) × Rate (
-              {(rate * 100).toFixed(1)}%)
+              Breakdown: Car Value (${carValue}) × Rate ({(rate * 100).toFixed(1)}%)
             </p>
           </div>
         )}
