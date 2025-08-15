@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { motion } from "framer-motion";
 
 export default function CalculatorPage() {
   const [carValue, setCarValue] = useState<number | "">("");
@@ -9,7 +9,6 @@ export default function CalculatorPage() {
   const [excessProtector, setExcessProtector] = useState(false);
   const [politicalTerrorismCover, setPoliticalTerrorismCover] = useState(false);
   const [premium, setPremium] = useState<number | null>(null);
-  const [rate, setRate] = useState<number | null>(null);
   const [additionalCovers, setAdditionalCovers] = useState<{
     excessProtector: number;
     politicalTerrorism: number;
@@ -28,8 +27,8 @@ export default function CalculatorPage() {
   const formatKES = (amount: number) =>
     new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES" }).format(amount);
 
-  const calculatePremium = () => {
-    if (carValue === "" || carValue <= 0 || carValue > MAX_CAR_VALUE) {
+  const calculatePremium = useCallback(() => {
+    if (carValue === "" || Number(carValue) <= 0 || Number(carValue) > MAX_CAR_VALUE) {
       resetCalculator();
       return;
     }
@@ -39,20 +38,21 @@ export default function CalculatorPage() {
     else if (coverageType === "third-party") baseRate = 0.02;
     else if (coverageType === "fire-theft") baseRate = 0.03;
 
+    const numCarValue = Number(carValue);
     let valueMultiplier = 1;
-    if (carValue >= 500_000 && carValue < 1_000_000) valueMultiplier = 1.2;
-    else if (carValue >= 1_000_000 && carValue < 1_500_000) valueMultiplier = 1.0;
-    else if (carValue >= 1_500_000 && carValue < 2_500_000) valueMultiplier = 0.8;
-    else if (carValue >= 2_500_000) valueMultiplier = 0.6;
+    if (numCarValue >= 500_000 && numCarValue < 1_000_000) valueMultiplier = 1.2;
+    else if (numCarValue >= 1_000_000 && numCarValue < 1_500_000) valueMultiplier = 1.0;
+    else if (numCarValue >= 1_500_000 && numCarValue < 2_500_000) valueMultiplier = 0.8;
+    else if (numCarValue >= 2_500_000) valueMultiplier = 0.6;
 
     const finalRate = baseRate * valueMultiplier;
-    const computedBasePremium = Number(carValue) * finalRate;
+    const computedBasePremium = numCarValue * finalRate;
     const basePremium = Math.max(computedBasePremium, 37_500);
 
-    let excessProtectorCost = excessProtector ? Math.max(carValue * 0.0025, 5000) : 0;
-    let politicalTerrorismCost =
-      politicalTerrorismCover && carValue > 4_000_000 ? carValue * 0.0025 : 0;
-    let courtesyCarCost = courtesyCar === "10days" ? 4500 : courtesyCar === "20days" ? 7500 : 0;
+    const excessProtectorCost = excessProtector ? Math.max(numCarValue * 0.0025, 5000) : 0;
+    const politicalTerrorismCost =
+      politicalTerrorismCover && numCarValue > 4_000_000 ? numCarValue * 0.0025 : 0;
+    const courtesyCarCost = courtesyCar === "10days" ? 4500 : courtesyCar === "20days" ? 7500 : 0;
 
     const calculatedBasicPremium = basePremium + excessProtectorCost + politicalTerrorismCost + courtesyCarCost;
 
@@ -64,7 +64,6 @@ export default function CalculatorPage() {
     const totalPremium =
       calculatedBasicPremium + stampDuty + trainingLevy + phcf + policyCharge;
 
-    setRate(finalRate);
     setBasicPremium(calculatedBasicPremium);
     setPremium(totalPremium);
     setAdditionalCovers({ 
@@ -73,14 +72,18 @@ export default function CalculatorPage() {
       courtesyCar: courtesyCarCost 
     });
     setLevies({ stampDuty, trainingLevy, phcf, policyCharge });
-  };
+  }, [carValue, coverageType, excessProtector, politicalTerrorismCover, courtesyCar]);
+
+  const isValidInput = useMemo(() => {
+    return carValue !== "" && Number(carValue) > 0 && Number(carValue) <= MAX_CAR_VALUE;
+  }, [carValue]);
 
   // Real-time calculation effect
   useEffect(() => {
     if (isValidInput) {
       calculatePremium();
     }
-  }, [carValue, coverageType, excessProtector, politicalTerrorismCover, courtesyCar]);
+  }, [calculatePremium, isValidInput]);
 
   const resetCalculator = () => {
     setCarValue("");
@@ -89,7 +92,6 @@ export default function CalculatorPage() {
     setPoliticalTerrorismCover(false);
     setCourtesyCar("none");
     setPremium(null);
-    setRate(null);
     setAdditionalCovers({ excessProtector: 0, politicalTerrorism: 0, courtesyCar: 0 });
     setBasicPremium(null);
     setLevies({ stampDuty: 0, trainingLevy: 0, phcf: 0, policyCharge: 0 });
@@ -100,8 +102,6 @@ export default function CalculatorPage() {
     "third-party": "Covers only damage or injury you cause to others.",
     "fire-theft": "Covers fire damage and theft, not collision or third-party.",
   };
-
-  const isValidInput = carValue !== "" && carValue > 0 && carValue <= MAX_CAR_VALUE;
 
   useEffect(() => {
     const matchHeights = () => {
@@ -153,11 +153,16 @@ export default function CalculatorPage() {
               value={carValue}
               onChange={(e) => {
                 const value = e.target.value === "" ? "" : Number(e.target.value);
-                if (value === "" || (value >= 0 && value <= MAX_CAR_VALUE)) setCarValue(value);
+                if (value === "" || (Number(value) >= 0 && Number(value) <= MAX_CAR_VALUE)) setCarValue(value);
               }}
               placeholder="Enter car value"
               className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-gray-500 text-gray-900"
             />
+            {carValue !== "" && Number(carValue) > MAX_CAR_VALUE && (
+              <p className="text-red-500 text-xs mt-1">
+                Maximum car value is {formatKES(MAX_CAR_VALUE)}
+              </p>
+            )}
           </div>
 
           <div className="mb-3">
