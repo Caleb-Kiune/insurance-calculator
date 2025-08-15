@@ -1,38 +1,99 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function CalculatorPage() {
   const [carValue, setCarValue] = useState<number | "">("");
   const [coverageType, setCoverageType] = useState("comprehensive");
+  const [excessProtector, setExcessProtector] = useState(false);
+  const [politicalTerrorismCover, setPoliticalTerrorismCover] = useState(false);
   const [premium, setPremium] = useState<number | null>(null);
   const [rate, setRate] = useState<number | null>(null);
+  const [additionalCovers, setAdditionalCovers] = useState<{
+    excessProtector: number;
+    politicalTerrorism: number;
+    courtesyCar: number;
+  }>({ excessProtector: 0, politicalTerrorism: 0, courtesyCar: 0 });
+  const [courtesyCar, setCourtesyCar] = useState<"none" | "standard" | "premium">("none");
+  const [basicPremium, setBasicPremium] = useState<number | null>(null);
+  const [levies, setLevies] = useState<{
+    stampDuty: number;
+    trainingLevy: number;
+    phcf: number;
+    policyCharge: number;
+  }>({ stampDuty: 0, trainingLevy: 0, phcf: 0, policyCharge: 0 });
 
   const MAX_CAR_VALUE = 100_000_000;
+  const formatKES = (amount: number) =>
+    new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES" }).format(amount);
 
-  const calculatePremium = () => {
-    if (carValue === "" || carValue <= 0 || carValue > MAX_CAR_VALUE) {
-      setPremium(null);
-      setRate(null);
-      return;
-    }
+     const calculatePremium = () => {
+     if (carValue === "" || carValue <= 0 || carValue > MAX_CAR_VALUE) {
+       resetCalculator();
+       return;
+     }
 
-    let selectedRate = 0;
+     let baseRate = 0;
+     if (coverageType === "comprehensive") baseRate = 0.05;
+     else if (coverageType === "third-party") baseRate = 0.02;
+     else if (coverageType === "fire-theft") baseRate = 0.03;
 
-    if (coverageType === "comprehensive") selectedRate = 0.05;
-    else if (coverageType === "third-party") selectedRate = 0.02;
-    else if (coverageType === "fire-theft") selectedRate = 0.03;
+     let valueMultiplier = 1;
+     if (carValue >= 500_000 && carValue < 1_000_000) valueMultiplier = 1.2;
+     else if (carValue >= 1_000_000 && carValue < 1_500_000) valueMultiplier = 1.0;
+     else if (carValue >= 1_500_000 && carValue < 2_500_000) valueMultiplier = 0.8;
+     else if (carValue >= 2_500_000) valueMultiplier = 0.6;
 
-    setRate(selectedRate);
-    setPremium(carValue * selectedRate);
-  };
+     const finalRate = baseRate * valueMultiplier;
+     const computedBasePremium = Number(carValue) * finalRate;
+     const basePremium = Math.max(computedBasePremium, 37_500);
 
-  const resetCalculator = () => {
-    setCarValue("");
-    setCoverageType("comprehensive");
-    setPremium(null);
-    setRate(null);
-  };
+     let excessProtectorCost = excessProtector ? Math.max(carValue * 0.0025, 5000) : 0;
+     let politicalTerrorismCost =
+       politicalTerrorismCover && carValue > 4_000_000 ? carValue * 0.0025 : 0;
+     let courtesyCarCost = courtesyCar === "standard" ? 20 : courtesyCar === "premium" ? 50 : 0;
+
+     const calculatedBasicPremium = basePremium + excessProtectorCost + politicalTerrorismCost + courtesyCarCost;
+
+     const stampDuty = 40;
+     const trainingLevy = calculatedBasicPremium * 0.002;
+     const phcf = calculatedBasicPremium * 0.0025;
+     const policyCharge = 1000;
+
+     const totalPremium =
+       calculatedBasicPremium + stampDuty + trainingLevy + phcf + policyCharge;
+
+     setRate(finalRate);
+     setBasicPremium(calculatedBasicPremium);
+     setPremium(totalPremium);
+     setAdditionalCovers({ 
+       excessProtector: excessProtectorCost, 
+       politicalTerrorism: politicalTerrorismCost,
+       courtesyCar: courtesyCarCost 
+     });
+     setLevies({ stampDuty, trainingLevy, phcf, policyCharge });
+   };
+
+   // Real-time calculation effect
+   useEffect(() => {
+     if (isValidInput) {
+       calculatePremium();
+     }
+   }, [carValue, coverageType, excessProtector, politicalTerrorismCover, courtesyCar]);
+
+     const resetCalculator = () => {
+     setCarValue("");
+     setCoverageType("comprehensive");
+     setExcessProtector(false);
+     setPoliticalTerrorismCover(false);
+     setCourtesyCar("none");
+     setPremium(null);
+     setRate(null);
+     setAdditionalCovers({ excessProtector: 0, politicalTerrorism: 0, courtesyCar: 0 });
+     setBasicPremium(null);
+     setLevies({ stampDuty: 0, trainingLevy: 0, phcf: 0, policyCharge: 0 });
+   };
 
   const coverageDescriptions: Record<string, string> = {
     comprehensive: "Full coverage: damage, fire, theft, and third-party liability.",
@@ -42,83 +103,212 @@ export default function CalculatorPage() {
 
   const isValidInput = carValue !== "" && carValue > 0 && carValue <= MAX_CAR_VALUE;
 
+     useEffect(() => {
+     const matchHeights = () => {
+       const inputCard = document.getElementById('input-card');
+       const outputCard = document.getElementById('output-card');
+       if (inputCard && outputCard) {
+         const inputHeight = inputCard.offsetHeight;
+         outputCard.style.height = `${inputHeight}px`;
+         outputCard.style.minHeight = `${inputHeight}px`;
+       }
+     };
+
+     matchHeights();
+
+     const resizeObserver = new ResizeObserver(matchHeights);
+     const inputCard = document.getElementById('input-card');
+     if (inputCard) resizeObserver.observe(inputCard);
+     window.addEventListener('resize', matchHeights);
+
+     return () => {
+       resizeObserver.disconnect();
+       window.removeEventListener('resize', matchHeights);
+     };
+   }, [carValue, coverageType, excessProtector, politicalTerrorismCover, courtesyCar, basicPremium]);
+
+  const AnimatedValue = ({ value }: { value: number | string }) => (
+    <motion.span
+      key={value}
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 10 }}
+      transition={{ duration: 0.5 }}
+      className="font-semibold"
+    >
+      {value}
+    </motion.span>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-white shadow-lg rounded-xl p-6 border border-gray-200">
-        <h1 className="text-3xl font-bold mb-6 text-center text-gray-800">
-          Vehicle Insurance Calculator
-        </h1>
+    <div className="min-h-screen bg-gray-100 p-6">
+      <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                 <div className="bg-white shadow-lg rounded-xl p-4 border border-gray-200" id="input-card">
+           <h1 className="text-2xl font-bold mb-4 text-center text-gray-900">Vehicle Insurance Calculator</h1>
 
-        {/* Car Value Input */}
-        <div className="mb-4">
-          <label className="block mb-2 font-medium text-gray-700">
-            Car Value (USD)
-          </label>
-          <input
-            type="number"
-            value={carValue}
-            onChange={(e) => {
-              const value = e.target.value === "" ? "" : Number(e.target.value);
-              if (value === "" || (value >= 0 && value <= MAX_CAR_VALUE)) setCarValue(value);
-            }}
-            placeholder="Enter car value"
-            className="w-full border border-gray-300 rounded-lg p-2 
-                       focus:ring-2 focus:ring-blue-500 focus:outline-none 
-                       placeholder-gray-600 text-gray-900"
-          />
-        </div>
-
-        {/* Coverage Type Dropdown */}
-        <div className="mb-4">
-          <label className="block mb-2 font-medium text-gray-700">
-            Coverage Type
-          </label>
-          <select
-            value={coverageType}
-            onChange={(e) => setCoverageType(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg p-2 
-                       focus:ring-2 focus:ring-blue-500 focus:outline-none 
-                       text-gray-900"
-          >
-            <option value="comprehensive">Comprehensive</option>
-            <option value="third-party">Third Party Only</option>
-            <option value="fire-theft">Fire & Theft</option>
-          </select>
-          <p className="mt-2 text-sm text-gray-600 italic">
-            {coverageDescriptions[coverageType]}
-          </p>
-        </div>
-
-        {/* Buttons */}
-        <div className="flex gap-4">
-          <button
-            onClick={calculatePremium}
-            disabled={!isValidInput}
-            className={`flex-1 bg-blue-600 text-white font-medium p-3 rounded-lg 
-                        hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
-          >
-            Calculate Premium
-          </button>
-          <button
-            onClick={resetCalculator}
-            className="flex-1 bg-gray-300 text-gray-800 font-medium p-3 rounded-lg 
-                       hover:bg-gray-400 transition-colors"
-          >
-            Reset
-          </button>
-        </div>
-
-        {/* Result + Breakdown */}
-        {premium !== null && rate !== null && (
-          <div className="mt-6 bg-blue-50 p-4 rounded-lg border border-blue-200 text-center">
-            <p className="text-lg font-semibold text-gray-800 mb-2">
-              Estimated Premium: <span className="text-green-600">${premium.toFixed(2)}</span>
-            </p>
-            <p className="text-sm text-gray-600">
-              Breakdown: Car Value (${carValue}) × Rate ({(rate * 100).toFixed(1)}%)
-            </p>
+           <div className="mb-3">
+             <label className="block mb-1 font-medium text-gray-700 text-sm">Car Value (KSh)</label>
+            <input
+              type="number"
+              value={carValue}
+              onChange={(e) => {
+                const value = e.target.value === "" ? "" : Number(e.target.value);
+                if (value === "" || (value >= 0 && value <= MAX_CAR_VALUE)) setCarValue(value);
+              }}
+              placeholder="Enter car value"
+              className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-gray-500 text-gray-900"
+            />
           </div>
-        )}
+
+                     <div className="mb-3">
+             <label className="block mb-1 font-medium text-gray-700 text-sm">Coverage Type</label>
+             <select
+               value={coverageType}
+               onChange={(e) => setCoverageType(e.target.value)}
+               className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-900"
+             >
+               <option value="comprehensive">Comprehensive</option>
+               <option value="third-party">Third Party Only</option>
+               <option value="fire-theft">Fire & Theft</option>
+             </select>
+             <p className="mt-1 text-xs text-gray-600 italic">{coverageDescriptions[coverageType]}</p>
+           </div>
+
+           <div className="mb-3">
+             <label className="block mb-1 font-medium text-gray-700 text-sm">Additional Covers</label>
+                         <div className="space-y-2">
+               <div className="flex items-center">
+                 <input
+                   type="checkbox"
+                   id="excessProtector"
+                   checked={excessProtector}
+                   onChange={(e) => setExcessProtector(e.target.checked)}
+                   className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
+                 />
+                 <label htmlFor="excessProtector" className="ml-1 text-xs text-gray-700">
+                   Excess Protector (0.25% of car value, min KSh 5,000)
+                 </label>
+               </div>
+               <div className="flex items-center">
+                 <input
+                   type="checkbox"
+                   id="politicalTerrorismCover"
+                   checked={politicalTerrorismCover}
+                   onChange={(e) => setPoliticalTerrorismCover(e.target.checked)}
+                   className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
+                 />
+                 <label htmlFor="politicalTerrorismCover" className="ml-1 text-xs text-gray-700">
+                   Political & Terrorism Cover (Free up to KSh 4,000,000, then 0.25%)
+                 </label>
+               </div>
+             </div>
+           </div>
+
+           <div className="mb-3">
+             <label className="block mb-1 font-medium text-gray-700 text-sm">Courtesy Car</label>
+             <div className="flex gap-4">
+               <div className="flex items-center">
+                 <input
+                   type="radio"
+                   id="courtesyCarNone"
+                   name="courtesyCar"
+                   value="none"
+                   checked={courtesyCar === "none"}
+                   onChange={(e) => setCourtesyCar(e.target.value as "none" | "standard" | "premium")}
+                   className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
+                 />
+                 <label htmlFor="courtesyCarNone" className="ml-1 text-xs text-gray-700">
+                   No Courtesy Car
+                 </label>
+               </div>
+               <div className="flex items-center">
+                 <input
+                   type="radio"
+                   id="courtesyCarStandard"
+                   name="courtesyCar"
+                   value="standard"
+                   checked={courtesyCar === "standard"}
+                   onChange={(e) => setCourtesyCar(e.target.value as "none" | "standard" | "premium")}
+                   className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
+                 />
+                 <label htmlFor="courtesyCarStandard" className="ml-1 text-xs text-gray-700">
+                   Standard (+£20)
+                 </label>
+               </div>
+               <div className="flex items-center">
+                 <input
+                   type="radio"
+                   id="courtesyCarPremium"
+                   name="courtesyCar"
+                   value="premium"
+                   checked={courtesyCar === "premium"}
+                   onChange={(e) => setCourtesyCar(e.target.value as "none" | "standard" | "premium")}
+                   className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
+                 />
+                 <label htmlFor="courtesyCarPremium" className="ml-1 text-xs text-gray-700">
+                   Premium (+£50)
+                 </label>
+               </div>
+             </div>
+           </div>
+
+                     <div className="flex gap-3 mt-4">
+             <button
+               onClick={resetCalculator}
+               className="flex-1 bg-gray-300 text-gray-800 font-medium py-2 px-3 rounded-lg hover:bg-gray-400 transition-colors text-sm"
+             >
+               Reset
+             </button>
+           </div>
+        </div>
+
+                 <div className="bg-white shadow-lg rounded-xl p-4 border border-gray-200" id="output-card">
+           <h2 className="text-xl font-semibold mb-3 text-center text-gray-900">Premium Breakdown</h2>
+                     {premium === null ? (
+             <p className="text-gray-700 text-center mt-4 text-sm">Enter details to see your premium.</p>
+           ) : (
+             <div className="space-y-3 text-gray-900">
+              <div className="flex justify-between">
+                <span>Basic Premium:</span>
+                <AnimatedValue value={formatKES(basicPremium!)} />
+              </div>
+              <div className="flex justify-between">
+                <span>Excess Protector:</span>
+                <AnimatedValue value={additionalCovers.excessProtector ? formatKES(additionalCovers.excessProtector) : "KSh 0"} />
+              </div>
+                             <div className="flex justify-between">
+                 <span>Political/Terrorism Cover:</span>
+                 <AnimatedValue value={additionalCovers.politicalTerrorism ? formatKES(additionalCovers.politicalTerrorism) : "Free"} />
+               </div>
+               <div className="flex justify-between">
+                 <span>Courtesy Car:</span>
+                 <AnimatedValue value={additionalCovers.courtesyCar ? formatKES(additionalCovers.courtesyCar) : "KSh 0"} />
+               </div>
+               <div className="border-t border-gray-300 pt-2 space-y-2">
+                <div className="flex justify-between">
+                  <span>Stamp Duty:</span>
+                  <AnimatedValue value={formatKES(levies.stampDuty)} />
+                </div>
+                <div className="flex justify-between">
+                  <span>Insurance Training Levy:</span>
+                  <AnimatedValue value={formatKES(levies.trainingLevy)} />
+                </div>
+                <div className="flex justify-between">
+                  <span>PHCF:</span>
+                  <AnimatedValue value={formatKES(levies.phcf)} />
+                </div>
+                <div className="flex justify-between">
+                  <span>Policy Charge:</span>
+                  <AnimatedValue value={formatKES(levies.policyCharge)} />
+                </div>
+              </div>
+              <div className="border-t border-gray-400 pt-2 flex justify-between font-bold text-lg">
+                <span>Total Premium:</span>
+                <AnimatedValue value={formatKES(premium)} />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
