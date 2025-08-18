@@ -42,8 +42,7 @@ export default function CalculatorPage() {
   // Inclusive helper flags
   const isExcessProtectorInclusive = useMemo(() => {
     if (calculatorType === "commercial" && commercialCoverageType === "comprehensive") return true;
-    if (calculatorType === "psv") return true;
-    return false; // private depends on selection; tsv not inclusive
+    return false; // private depends on selection; psv and tsv not inclusive
   }, [calculatorType, commercialCoverageType]);
 
   const isPvtInclusive = useMemo(() => {
@@ -89,8 +88,7 @@ export default function CalculatorPage() {
       baseRate = finalRate; // Store the actual rate used for display
 
       excessProtectorCost = excessProtector ? Math.max(carValue * 0.0025, 5000) : 0;
-      politicalTerrorismCost =
-        politicalTerrorismCover && carValue > 4_000_000 ? carValue * 0.0025 : 0;
+      politicalTerrorismCost = carValue > 4_000_000 && politicalTerrorismCover ? carValue * 0.0025 : 0;
       courtesyCarCost = courtesyCar === "10days" ? 4500 : courtesyCar === "20days" ? 7500 : 0;
     }
 
@@ -190,7 +188,7 @@ export default function CalculatorPage() {
     let basePremium = carValue * 0.06;
     if (basePremium < 40_000) basePremium = 40_000;
 
-    const excessProtectorCost = 0; // free
+    const excessProtectorCost = 0; // explicitly banned
     const pllCost = Math.max(0, Math.floor(passengers)) * 500;
 
     let politicalTerrorismCost = 0;
@@ -215,10 +213,10 @@ export default function CalculatorPage() {
   }, []);
 
   // TSV premium calculation
-  const calculateTSVPremium = useCallback((carValue: number, passengers: number, politicalTerrorismSelected: boolean) => {
+  const calculateTSVPremium = useCallback((carValue: number, passengers: number, politicalTerrorismSelected: boolean, excessProtectorSelected: boolean) => {
     const basePremium = carValue * 0.055;
 
-    const excessProtectorCost = Math.max(carValue * 0.005, 5_000);
+    const excessProtectorCost = excessProtectorSelected ? Math.max(carValue * 0.005, 5_000) : 0;
     const pllCost = Math.max(0, Math.floor(passengers)) * 500;
 
     let politicalTerrorismCost = 0;
@@ -267,7 +265,9 @@ export default function CalculatorPage() {
       | undefined;
 
     if (calculatorType === "private") {
-      result = calculatePrivatePremium(numCarValue, coverageType, excessProtector, politicalTerrorismCover, courtesyCar);
+      // Automatically select PVT for car values <= 4M
+      const pvtSelected = numCarValue <= 4_000_000 ? true : politicalTerrorismCover;
+      result = calculatePrivatePremium(numCarValue, coverageType, excessProtector, pvtSelected, courtesyCar);
     } else if (calculatorType === "commercial") {
       const pvtSelected = numCarValue > 5_000_000 ? politicalTerrorismCover : true;
       result = calculateCommercialPremium(
@@ -283,7 +283,7 @@ export default function CalculatorPage() {
       result = calculatePSVPremium(numCarValue, pllPassengers, pvtSelected);
     } else if (calculatorType === "tsv") {
       const pvtSelected = numCarValue > 5_000_000 ? politicalTerrorismCover : true;
-      result = calculateTSVPremium(numCarValue, pllPassengers, pvtSelected);
+      result = calculateTSVPremium(numCarValue, pllPassengers, pvtSelected, excessProtector);
     }
 
     if (result) {
@@ -361,6 +361,10 @@ export default function CalculatorPage() {
     if (numericValue >= 0 && numericValue <= MAX_CAR_VALUE) {
       setCarValue(numericValue);
       setCarValueInput(formatNumber(numericValue));
+      // Auto-select PVT for private vehicles <= 4M
+      if (calculatorType === "private" && numericValue <= 4_000_000) {
+        setPoliticalTerrorismCover(true);
+      }
     }
   };
 
@@ -589,92 +593,92 @@ export default function CalculatorPage() {
           {/** Private Vehicle Options */}
           {calculatorType === "private" && (
             <>
-          {/** Coverage Type */}
-          <div className="mb-3">
-            <label className="block mb-1 font-medium text-gray-700 text-sm">
-              Coverage Type
-            </label>
-            <select
-              value={coverageType}
-              onChange={(e) => setCoverageType(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-900"
-            >
-              <option value="comprehensive">Comprehensive</option>
-              <option value="third-party">Third Party Only</option>
-            </select>
-            <p className="mt-1 text-xs text-gray-600 italic">
-              {coverageDescriptions[coverageType]}
-            </p>
-          </div>
+              {/** Coverage Type */}
+              <div className="mb-3">
+                <label className="block mb-1 font-medium text-gray-700 text-sm">
+                  Coverage Type
+                </label>
+                <select
+                  value={coverageType}
+                  onChange={(e) => setCoverageType(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-900"
+                >
+                  <option value="comprehensive">Comprehensive</option>
+                  <option value="third-party">Third Party Only</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-600 italic">
+                  {coverageDescriptions[coverageType]}
+                </p>
+              </div>
 
-          {/** Courtesy Car */}
-          <div className="mb-3">
-            <label className="block mb-1 font-medium text-gray-700 text-sm">
-              Courtesy Car
-            </label>
-            <div
-              className={`flex gap-4 ${
-                coverageType === "third-party" ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            >
-              <div className="flex items-center">
-                <input
-                  type="radio"
-                  id="courtesyCarNone"
-                  name="courtesyCar"
-                  value="none"
-                  checked={courtesyCar === "none"}
-                  onChange={(e) =>
-                    setCourtesyCar(e.target.value as "none" | "10days" | "20days")
-                  }
-                  disabled={coverageType === "third-party"}
-                  className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
-                />
-                <label htmlFor="courtesyCarNone" className="ml-1 text-xs text-gray-700">
-                  No Courtesy Car
+              {/** Courtesy Car */}
+              <div className="mb-3">
+                <label className="block mb-1 font-medium text-gray-700 text-sm">
+                  Courtesy Car
                 </label>
+                <div
+                  className={`flex gap-4 ${
+                    coverageType === "third-party" ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <input
+                      type="radio"
+                      id="courtesyCarNone"
+                      name="courtesyCar"
+                      value="none"
+                      checked={courtesyCar === "none"}
+                      onChange={(e) =>
+                        setCourtesyCar(e.target.value as "none" | "10days" | "20days")
+                      }
+                      disabled={coverageType === "third-party"}
+                      className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
+                    />
+                    <label htmlFor="courtesyCarNone" className="ml-1 text-xs text-gray-700">
+                      No Courtesy Car
+                    </label>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="radio"
+                      id="courtesyCar10Days"
+                      name="courtesyCar"
+                      value="10days"
+                      checked={courtesyCar === "10days"}
+                      onChange={(e) =>
+                        setCourtesyCar(e.target.value as "none" | "10days" | "20days")
+                      }
+                      disabled={coverageType === "third-party"}
+                      className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
+                    />
+                    <label htmlFor="courtesyCar10Days" className="ml-1 text-xs text-gray-700">
+                      10 Days (+KSh 4,500)
+                    </label>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="radio"
+                      id="courtesyCar20Days"
+                      name="courtesyCar"
+                      value="20days"
+                      checked={courtesyCar === "20days"}
+                      onChange={(e) =>
+                        setCourtesyCar(e.target.value as "none" | "10days" | "20days")
+                      }
+                      disabled={coverageType === "third-party"}
+                      className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
+                    />
+                    <label htmlFor="courtesyCar20Days" className="ml-1 text-xs text-gray-700">
+                      20 Days (+KSh 7,500)
+                    </label>
+                  </div>
+                </div>
+                {coverageType === "third-party" && (
+                  <p className="text-xs text-gray-500 italic mt-1">
+                    Not available for Third Party Only
+                  </p>
+                )}
               </div>
-              <div className="flex items-center">
-                <input
-                  type="radio"
-                  id="courtesyCar10Days"
-                  name="courtesyCar"
-                  value="10days"
-                  checked={courtesyCar === "10days"}
-                  onChange={(e) =>
-                    setCourtesyCar(e.target.value as "none" | "10days" | "20days")
-                  }
-                  disabled={coverageType === "third-party"}
-                  className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
-                />
-                <label htmlFor="courtesyCar10Days" className="ml-1 text-xs text-gray-700">
-                  10 Days (+KSh 4,500)
-                </label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="radio"
-                  id="courtesyCar20Days"
-                  name="courtesyCar"
-                  value="20days"
-                  checked={courtesyCar === "20days"}
-                  onChange={(e) =>
-                    setCourtesyCar(e.target.value as "none" | "10days" | "20days")
-                  }
-                  disabled={coverageType === "third-party"}
-                  className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
-                />
-                <label htmlFor="courtesyCar20Days" className="ml-1 text-xs text-gray-700">
-                  20 Days (+KSh 7,500)
-                </label>
-              </div>
-            </div>
-            {coverageType === "third-party" && (
-              <p className="text-xs text-gray-500 italic mt-1">
-                Not available for Third Party Only
-              </p>
-            )}
-          </div>
             </>
           )}
 
@@ -701,8 +705,7 @@ export default function CalculatorPage() {
                   placeholder="Enter number of passengers"
                 />
               </div>
-              <p className="mt-1 text-xs text-gray-600 italic">Inclusive of Excess Protector{Number(carValue) <= 5_000_000 ? " and PVT" : ""}</p>
-              {/* PVT selection handled in Additional Covers (disabled for PSV) */}
+              <p className="mt-1 text-xs text-gray-600 italic">{Number(carValue) <= 5_000_000 ? "PVT Inclusive" : "PVT optional above KSh 5,000,000"}</p>
             </div>
           )}
 
@@ -729,75 +732,90 @@ export default function CalculatorPage() {
                   placeholder="Enter number of passengers"
                 />
               </div>
-              {/* PVT selection handled in Additional Covers (row-level enablement) */}
-              <p className="mt-1 text-xs text-gray-600 italic">Excess Protector auto-applied at 0.5% (min KSh 5,000){Number(carValue) <= 5_000_000 ? ", PVT Inclusive" : ""}</p>
+              <p className="mt-1 text-xs text-gray-600 italic">{Number(carValue) <= 5_000_000 ? "PVT Inclusive" : "PVT optional above KSh 5,000,000"}</p>
             </div>
           )}
 
-          {/** Additional Covers - Hidden for commercial third-party; EP disabled for Commercial/PSV/TSV, PVT selectable >5M for Commercial/PSV/TSV */}
+          {/** Additional Covers - Hidden for commercial third-party; EP disabled for Commercial/PSV, enabled for TSV, PVT selectable >5M for Commercial/PSV/TSV */}
           {!(calculatorType === "commercial" && commercialCoverageType === "third-party") && (
-          <div className="mb-3">
-            <label className="block mb-1 font-medium text-gray-700 text-sm">
-              Additional Covers
-            </label>
-            <div className={`space-y-2`}>
-              {/** Excess Protector row */}
-              <div className={`flex items-center ${
-                (calculatorType === "commercial" || calculatorType === "psv" || calculatorType === "tsv" || coverageType === "third-party") ? "opacity-50 cursor-not-allowed" : ""
-              }`}>
-                <input
-                  type="checkbox"
-                  id="excessProtector"
-                  checked={
-                    calculatorType === "commercial" || calculatorType === "psv" || calculatorType === "tsv"
-                      ? true
-                      : excessProtector
-                  }
-                  onChange={(e) => setExcessProtector(e.target.checked)}
-                  disabled={calculatorType === "commercial" || coverageType === "third-party" || calculatorType === "psv" || calculatorType === "tsv"}
-                  className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
-                />
-                <label htmlFor="excessProtector" className="ml-1 text-xs text-gray-700">
-                  Excess Protector (0.25% of car value, min KSh 5,000)
-                </label>
-              </div>
-              {/** PVT row */}
-              <div className={`flex items-center ${
-                ((calculatorType === "commercial" || calculatorType === "psv" || calculatorType === "tsv") && Number(carValue) <= 5_000_000) || coverageType === "third-party"
-                  ? "opacity-50 cursor-not-allowed"
-                  : ""
-              }`}>
-                <input
-                  type="checkbox"
-                  id="politicalTerrorismCover"
-                  checked={(() => {
-                    const value = Number(carValue) || 0;
-                    if (calculatorType === "commercial" || calculatorType === "psv" || calculatorType === "tsv") {
-                      return value <= 5_000_000 ? true : politicalTerrorismCover;
+            <div className="mb-3">
+              <label className="block mb-1 font-medium text-gray-700 text-sm">
+                Additional Covers
+              </label>
+              <div className="space-y-2">
+                {/** Excess Protector row */}
+                <div className={`flex items-center ${
+                  (calculatorType === "commercial" || calculatorType === "psv" || coverageType === "third-party") ? "opacity-50 cursor-not-allowed" : ""
+                }`}>
+                  <input
+                    type="checkbox"
+                    id="excessProtector"
+                    checked={
+                      calculatorType === "commercial" ? true : calculatorType === "psv" ? false : excessProtector
                     }
-                    return politicalTerrorismCover;
-                  })()}
-                  onChange={(e) => setPoliticalTerrorismCover(e.target.checked)}
-                  disabled={(() => {
-                    const value = Number(carValue) || 0;
-                    if (calculatorType === "commercial" || calculatorType === "psv" || calculatorType === "tsv") {
-                      return value <= 5_000_000; // free/inclusive up to 5M, optional above
-                    }
-                    return coverageType === "third-party";
-                  })()}
-                  className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
-                />
-                <label htmlFor="politicalTerrorismCover" className="ml-1 text-xs text-gray-700">
-                  {pvtLabelText}
-                </label>
+                    onChange={(e) => setExcessProtector(e.target.checked)}
+                    disabled={calculatorType === "commercial" || calculatorType === "psv" || coverageType === "third-party"}
+                    className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
+                  />
+                  <label htmlFor="excessProtector" className="ml-1 text-xs text-gray-700">
+                    {calculatorType === "tsv"
+                      ? "Excess Protector (0.5% of car value, min KSh 5,000)"
+                      : calculatorType === "psv"
+                      ? "No Excess Protector"
+                      : "Excess Protector (0.25% of car value, min KSh 5,000)"}
+                  </label>
+                </div>
+                {/** PVT row */}
+                <div className={`flex items-center relative ${
+                  ((calculatorType === "private" && Number(carValue) <= 4_000_000) ||
+                   (calculatorType !== "private" && Number(carValue) <= 5_000_000) ||
+                   coverageType === "third-party") ? "opacity-50 cursor-not-allowed" : ""
+                }`}>
+                  <input
+                    type="checkbox"
+                    id="politicalTerrorismCover"
+                    checked={(() => {
+                      const value = Number(carValue) || 0;
+                      if (calculatorType === "private") {
+                        return value <= 4_000_000 ? true : politicalTerrorismCover;
+                      }
+                      if (calculatorType === "commercial" || calculatorType === "psv" || calculatorType === "tsv") {
+                        return value <= 5_000_000 ? true : politicalTerrorismCover;
+                      }
+                      return politicalTerrorismCover;
+                    })()}
+                    onChange={(e) => setPoliticalTerrorismCover(e.target.checked)}
+                    disabled={(() => {
+                      const value = Number(carValue) || 0;
+                      if (calculatorType === "private") {
+                        return value <= 4_000_000 || coverageType === "third-party";
+                      }
+                      if (calculatorType === "commercial" || calculatorType === "psv" || calculatorType === "tsv") {
+                        return value <= 5_000_000;
+                      }
+                      return coverageType === "third-party";
+                    })()}
+                    className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
+                  />
+                  <label htmlFor="politicalTerrorismCover" className="ml-1 text-xs text-gray-700">
+                    {pvtLabelText}
+                    {calculatorType === "private" && Number(carValue) <= 4_000_000 && coverageType === "comprehensive" && (
+                      <span
+                        className="ml-2 text-xs text-blue-600 cursor-pointer"
+                        title="PVT Inclusive"
+                      >
+                        ℹ️
+                      </span>
+                    )}
+                  </label>
+                </div>
               </div>
+              {calculatorType === "private" && coverageType === "third-party" && (
+                <p className="text-xs text-gray-500 italic mt-1">
+                  Not available for Third Party Only
+                </p>
+              )}
             </div>
-            {calculatorType === "private" && coverageType === "third-party" && (
-              <p className="text-xs text-gray-500 italic mt-1">
-                Not available for Third Party Only
-              </p>
-            )}
-          </div>
           )}
 
           <div className="flex gap-3 mt-4">
@@ -906,10 +924,31 @@ export default function CalculatorPage() {
                 </>
               )}
 
-              {(calculatorType === "psv" || calculatorType === "tsv") && (
+              {calculatorType === "psv" && (
                 <>
                   <div className="flex justify-between">
-                    <span>Excess Protector{(calculatorType === "psv" || additionalCovers.excessProtector === 0) ? " (Inclusive)" : ""}:</span>
+                    <span>PVT{isPvtInclusive ? " (Inclusive)" : ""}:</span>
+                    <AnimatedValue
+                      value={
+                        additionalCovers.politicalTerrorism
+                          ? formatKES(additionalCovers.politicalTerrorism)
+                          : "KSh 0"
+                      }
+                    />
+                  </div>
+                  {additionalCovers.pll > 0 && (
+                    <div className="flex justify-between">
+                      <span>Passenger Legal Liability:</span>
+                      <AnimatedValue value={formatKES(additionalCovers.pll)} />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {calculatorType === "tsv" && (
+                <>
+                  <div className="flex justify-between">
+                    <span>Excess Protector:</span>
                     <AnimatedValue
                       value={
                         additionalCovers.excessProtector
@@ -939,10 +978,10 @@ export default function CalculatorPage() {
 
               {/** Always show Total Basic Premium when any add-ons contribute for all calculator types */}
               {(additionalCovers.excessProtector > 0 || additionalCovers.politicalTerrorism > 0 || additionalCovers.courtesyCar > 0 || additionalCovers.pll > 0) && (
-              <div className="border-t border-gray-300 pt-2 flex justify-between font-bold">
-                <span>Total Basic Premium:</span>
+                <div className="border-t border-gray-300 pt-2 flex justify-between font-bold">
+                  <span>Total Basic Premium:</span>
                   <AnimatedValue value={formatKES(basicPremium! + additionalCovers.excessProtector + additionalCovers.politicalTerrorism + additionalCovers.courtesyCar + additionalCovers.pll)} />
-              </div>
+                </div>
               )}
 
               <div className="space-y-2">
