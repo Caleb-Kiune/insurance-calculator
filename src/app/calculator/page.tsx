@@ -345,10 +345,14 @@ export default function CalculatorPage() {
 
   const pvtLabelText = useMemo(() => {
     if (calculatorType === "private") {
-      return "PVT (Free up to KSh 4,000,000, then 0.25%, min KSh 2,500)";
+      return Number(carValue) <= 4_000_000 && coverageType === "comprehensive"
+        ? "PVT (Inclusive)"
+        : "PVT (0.25% of car value, min KSh 2,500)";
     }
-    return "PVT (Free up to KSh 5,000,000, then 0.25%, min KSh 2,500)";
-  }, [calculatorType]);
+    return Number(carValue) <= 5_000_000
+      ? "PVT (Inclusive)"
+      : "PVT (0.25% of car value, min KSh 2,500)";
+  }, [calculatorType, carValue, coverageType]);
 
   const handleCarValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawValue = e.target.value.replace(/,/g, ""); // remove commas
@@ -739,6 +743,9 @@ export default function CalculatorPage() {
           {/** Additional Covers - Hidden for commercial third-party; EP disabled for Commercial/PSV, enabled for TSV, PVT selectable >5M for Commercial/PSV/TSV */}
           {!(calculatorType === "commercial" && commercialCoverageType === "third-party") && (
             <div className="mb-3">
+              {calculatorType === "private" && Number(carValue) <= 4_000_000 && coverageType === "comprehensive" && (
+                <p className="mt-1 text-xs text-gray-600 italic mb-1">PVT Inclusive</p>
+              )}
               <label className="block mb-1 font-medium text-gray-700 text-sm">
                 Additional Covers
               </label>
@@ -799,14 +806,6 @@ export default function CalculatorPage() {
                   />
                   <label htmlFor="politicalTerrorismCover" className="ml-1 text-xs text-gray-700">
                     {pvtLabelText}
-                    {calculatorType === "private" && Number(carValue) <= 4_000_000 && coverageType === "comprehensive" && (
-                      <span
-                        className="ml-2 text-xs text-blue-600 cursor-pointer"
-                        title="PVT Inclusive"
-                      >
-                        ℹ️
-                      </span>
-                    )}
                   </label>
                 </div>
               </div>
