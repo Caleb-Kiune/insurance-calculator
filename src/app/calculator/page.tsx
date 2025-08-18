@@ -8,10 +8,13 @@ export default function CalculatorPage() {
   const [carValueInput, setCarValueInput] = useState<string>(""); // formatted input
   const [carValue, setCarValue] = useState<number | "">("");
   const [coverageType, setCoverageType] = useState("comprehensive");
+  const [commercialCoverageType, setCommercialCoverageType] = useState<"comprehensive" | "third-party">("comprehensive");
   const [excessProtector, setExcessProtector] = useState(false);
   const [politicalTerrorismCover, setPoliticalTerrorismCover] = useState(false);
   const [courtesyCar, setCourtesyCar] = useState<"none" | "10days" | "20days">("none");
   const [fleetType, setFleetType] = useState<"single" | "fleet">("single");
+  const [tonnage, setTonnage] = useState<number | "">("");
+  const [usageType, setUsageType] = useState<"general" | "own">("general");
   const [premium, setPremium] = useState<number | null>(null);
   const [basicPremium, setBasicPremium] = useState<number | null>(null);
   const [additionalCovers, setAdditionalCovers] = useState<{
@@ -91,23 +94,69 @@ export default function CalculatorPage() {
   }, []);
 
   // Commercial vehicle premium calculation
-  const calculateCommercialPremium = useCallback((carValue: number, isFleet: boolean) => {
+  const calculateCommercialPremium = useCallback((
+    carValue: number,
+    isFleet: boolean,
+    coverage: "comprehensive" | "third-party" = "comprehensive",
+    tonnageValue?: number,
+    usage?: "general" | "own"
+  ) => {
+    // Third-party only logic (fixed premiums by tonnage and usage type)
+    if (coverage === "third-party") {
+      let basePremiumTP = 0;
+      const t = tonnageValue ?? 0;
+      const isGeneral = usage === "general";
+
+      if (t > 0 && t <= 3) {
+        basePremiumTP = 7_500;
+      } else if (t > 3 && t <= 8) {
+        basePremiumTP = 10_000;
+      } else if (t > 8 && t <= 15) {
+        basePremiumTP = isGeneral ? 15_000 : 12_500;
+      } else if (t > 15) {
+        basePremiumTP = 20_000;
+      } else {
+        basePremiumTP = 0; // invalid tonnage
+      }
+
+      const stampDuty = 40;
+      const trainingLevy = basePremiumTP * 0.002;
+      const phcf = basePremiumTP * 0.0025;
+      const policyCharge = 1000;
+      const totalPremium = basePremiumTP + stampDuty + trainingLevy + phcf + policyCharge;
+
+      return {
+        basicPremium: basePremiumTP,
+        premium: totalPremium,
+        additionalCovers: { excessProtector: 0, politicalTerrorism: 0, courtesyCar: 0 },
+        levies: { stampDuty, trainingLevy, phcf, policyCharge },
+      };
+    }
+
+    // Comprehensive logic (fleet vs single)
     const rate = isFleet ? 0.0475 : 0.05;
     let basePremium = carValue * rate;
     if (basePremium < 50_000) basePremium = 50_000;
 
-    // free add-ons
+    // Add-ons: Excess protector free; PVT rule based on car value
     const excessProtectorCost = 0;
-    const politicalTerrorismCost = 0;
+    let politicalTerrorismCost = 0;
+    if (carValue > 5_000_000) {
+      politicalTerrorismCost = Math.max(carValue * 0.0025, 2_500);
+    } else {
+      politicalTerrorismCost = 0;
+    }
     const courtesyCarCost = 0;
+
+    const totalBasicPremium = basePremium + politicalTerrorismCost + courtesyCarCost + excessProtectorCost;
 
     // levies
     const stampDuty = 40;
-    const trainingLevy = basePremium * 0.002;
-    const phcf = basePremium * 0.0025;
+    const trainingLevy = totalBasicPremium * 0.002;
+    const phcf = totalBasicPremium * 0.0025;
     const policyCharge = 1000;
 
-    const totalPremium = basePremium + stampDuty + trainingLevy + phcf + policyCharge;
+    const totalPremium = totalBasicPremium + stampDuty + trainingLevy + phcf + policyCharge;
 
     return {
       basicPremium: basePremium,
@@ -118,29 +167,46 @@ export default function CalculatorPage() {
   }, []);
 
   const calculatePremium = useCallback(() => {
-    if (carValue === "" || Number(carValue) <= 0 || Number(carValue) > MAX_CAR_VALUE) {
-      resetCalculator(false);
-      return;
+    // Validation differs by calculator type and coverage
+    if (calculatorType === "commercial" && commercialCoverageType === "third-party") {
+      if (tonnage === "" || Number(tonnage) <= 0) {
+        resetCalculator(false);
+        return;
+      }
+    } else {
+      if (carValue === "" || Number(carValue) <= 0 || Number(carValue) > MAX_CAR_VALUE) {
+        resetCalculator(false);
+        return;
+      }
     }
 
-    const numCarValue = Number(carValue);
+    const numCarValue = Number(carValue || 0);
     let result;
 
     if (calculatorType === "private") {
       result = calculatePrivatePremium(numCarValue, coverageType, excessProtector, politicalTerrorismCover, courtesyCar);
     } else {
-      result = calculateCommercialPremium(numCarValue, fleetType === "fleet");
+      result = calculateCommercialPremium(
+        numCarValue,
+        fleetType === "fleet",
+        commercialCoverageType,
+        typeof tonnage === "number" ? tonnage : Number(tonnage || 0),
+        usageType
+      );
     }
 
     setBasicPremium(result.basicPremium);
     setPremium(result.premium);
     setAdditionalCovers(result.additionalCovers);
     setLevies(result.levies);
-  }, [carValue, calculatorType, coverageType, excessProtector, politicalTerrorismCover, courtesyCar, fleetType, calculatePrivatePremium, calculateCommercialPremium]);
+  }, [carValue, calculatorType, coverageType, excessProtector, politicalTerrorismCover, courtesyCar, fleetType, commercialCoverageType, tonnage, usageType, calculatePrivatePremium, calculateCommercialPremium]);
 
   const isValidInput = useMemo(() => {
+    if (calculatorType === "commercial" && commercialCoverageType === "third-party") {
+      return tonnage !== "" && Number(tonnage) > 0;
+    }
     return carValue !== "" && Number(carValue) > 0 && Number(carValue) <= MAX_CAR_VALUE;
-  }, [carValue]);
+  }, [calculatorType, commercialCoverageType, tonnage, carValue]);
 
   // Debounce effect for carValue calculation
   useEffect(() => {
@@ -158,10 +224,13 @@ export default function CalculatorPage() {
       setCarValueInput("");
     }
     setCoverageType("comprehensive");
+    setCommercialCoverageType("comprehensive");
     setExcessProtector(false);
     setPoliticalTerrorismCover(false);
     setCourtesyCar("none");
     setFleetType("single");
+    setTonnage("");
+    setUsageType("general");
     setPremium(null);
     setAdditionalCovers({ excessProtector: 0, politicalTerrorism: 0, courtesyCar: 0 });
     setBasicPremium(null);
@@ -266,43 +335,115 @@ export default function CalculatorPage() {
 
           {/** Commercial Vehicle Options */}
           {calculatorType === "commercial" && (
-            <div className="mb-3">
-              <label className="block mb-1 font-medium text-gray-700 text-sm">
-                Fleet Type
-              </label>
-              <div className="flex gap-4">
-                <div className="flex items-center">
-                  <input
-                    type="radio"
-                    id="singleVehicle"
-                    name="fleetType"
-                    value="single"
-                    checked={fleetType === "single"}
-                    onChange={(e) => setFleetType(e.target.value as "single" | "fleet")}
-                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-2"
-                  />
-                  <label htmlFor="singleVehicle" className="ml-2 text-sm text-gray-700">
-                    Single Vehicle (5.0%)
-                  </label>
-                </div>
-                <div className="flex items-center">
-                  <input
-                    type="radio"
-                    id="fleetVehicle"
-                    name="fleetType"
-                    value="fleet"
-                    checked={fleetType === "fleet"}
-                    onChange={(e) => setFleetType(e.target.value as "single" | "fleet")}
-                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-2"
-                  />
-                  <label htmlFor="fleetVehicle" className="ml-2 text-sm text-gray-700">
-                    Fleet (3+) (4.75%)
-                  </label>
-                </div>
+            <div className="mb-3 space-y-3">
+              <div>
+                <label className="block mb-1 font-medium text-gray-700 text-sm">
+                  Coverage Type
+                </label>
+                <select
+                  value={commercialCoverageType}
+                  onChange={(e) => setCommercialCoverageType(e.target.value as "comprehensive" | "third-party")}
+                  className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-900"
+                >
+                  <option value="comprehensive">Comprehensive</option>
+                  <option value="third-party">Third Party Only</option>
+                </select>
               </div>
-              <p className="mt-1 text-xs text-gray-600 italic">
-                Inclusive of (Excess Protector and PVT)
-              </p>
+
+              {commercialCoverageType === "comprehensive" && (
+                <div>
+                  <label className="block mb-1 font-medium text-gray-700 text-sm">
+                    Fleet Type
+                  </label>
+                  <div className="flex gap-4">
+                    <div className="flex items-center">
+                      <input
+                        type="radio"
+                        id="singleVehicle"
+                        name="fleetType"
+                        value="single"
+                        checked={fleetType === "single"}
+                        onChange={(e) => setFleetType(e.target.value as "single" | "fleet")}
+                        className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-2"
+                      />
+                      <label htmlFor="singleVehicle" className="ml-2 text-sm text-gray-700">
+                        Single Vehicle (5.0%)
+                      </label>
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        type="radio"
+                        id="fleetVehicle"
+                        name="fleetType"
+                        value="fleet"
+                        checked={fleetType === "fleet"}
+                        onChange={(e) => setFleetType(e.target.value as "single" | "fleet")}
+                        className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-2"
+                      />
+                      <label htmlFor="fleetVehicle" className="ml-2 text-sm text-gray-700">
+                        Fleet (3+) (4.75%)
+                      </label>
+                    </div>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-600 italic">
+                    Inclusive of (Excess Protector and PVT)
+                  </p>
+                </div>
+              )}
+
+              {commercialCoverageType === "third-party" && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block mb-1 font-medium text-gray-700 text-sm">
+                      Vehicle Tonnage (tonnes)
+                    </label>
+                    <input
+                      type="number"
+                      value={tonnage}
+                      onChange={(e) => setTonnage(e.target.value === "" ? "" : Number(e.target.value))}
+                      placeholder="Enter tonnage"
+                      className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-gray-500 text-gray-900"
+                      min={0}
+                      step={0.1}
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-medium text-gray-700 text-sm">
+                      Usage Type
+                    </label>
+                    <div className="flex gap-4">
+                      <div className="flex items-center">
+                        <input
+                          type="radio"
+                          id="usageGeneral"
+                          name="usageType"
+                          value="general"
+                          checked={usageType === "general"}
+                          onChange={(e) => setUsageType(e.target.value as "general" | "own")}
+                          className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-2"
+                        />
+                        <label htmlFor="usageGeneral" className="ml-2 text-sm text-gray-700">
+                          General Cartage
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="radio"
+                          id="usageOwn"
+                          name="usageType"
+                          value="own"
+                          checked={usageType === "own"}
+                          onChange={(e) => setUsageType(e.target.value as "general" | "own")}
+                          className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-2"
+                        />
+                        <label htmlFor="usageOwn" className="ml-2 text-sm text-gray-700">
+                          Own Goods
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -398,7 +539,8 @@ export default function CalculatorPage() {
             </>
           )}
 
-          {/** Additional Covers - Always visible; disabled and auto-checked for commercial */}
+          {/** Additional Covers - Hidden for commercial third-party; disabled/checked for commercial comprehensive */}
+          {!(calculatorType === "commercial" && commercialCoverageType === "third-party") && (
           <div className="mb-3">
             <label className="block mb-1 font-medium text-gray-700 text-sm">
               Additional Covers
@@ -443,6 +585,7 @@ export default function CalculatorPage() {
               </p>
             )}
           </div>
+          )}
 
           <div className="flex gap-3 mt-4">
             <button
@@ -473,7 +616,7 @@ export default function CalculatorPage() {
                       {" "}({((basicPremium! / Number(carValue)) * 100).toFixed(1)}% of Car Value)
                     </span>
                   )}
-                  {calculatorType === "commercial" && (
+                  {calculatorType === "commercial" && commercialCoverageType === "comprehensive" && (
                     <span className="text-gray-500 font-normal">
                       {" "}({fleetType === "fleet" ? "4.75" : "5.0"}% of Car Value)
                     </span>
@@ -519,7 +662,7 @@ export default function CalculatorPage() {
                 </>
               )}
 
-              {calculatorType === "commercial" && (
+              {calculatorType === "commercial" && commercialCoverageType === "comprehensive" && (
                 <>
                   <div className="flex justify-between">
                     <span>Excess Protector:</span>
@@ -527,7 +670,13 @@ export default function CalculatorPage() {
                   </div>
                   <div className="flex justify-between">
                     <span>Political/Terrorism Cover:</span>
-                    <AnimatedValue value={"KSh 0"} />
+                    <AnimatedValue
+                      value={
+                        additionalCovers.politicalTerrorism
+                          ? formatKES(additionalCovers.politicalTerrorism)
+                          : "KSh 0"
+                      }
+                    />
                   </div>
                 </>
               )}
