@@ -49,10 +49,11 @@ export default function CalculatorPage() {
   const isPvtInclusive = useMemo(() => {
     const value = Number(carValue || 0);
     if (value === 0) return false;
+    if (calculatorType === "private" && coverageType === "comprehensive") return value <= 4_000_000;
     if (calculatorType === "commercial" && commercialCoverageType === "comprehensive") return value <= 5_000_000;
     if (calculatorType === "psv" || calculatorType === "tsv") return value <= 5_000_000;
     return false;
-  }, [calculatorType, commercialCoverageType, carValue]);
+  }, [calculatorType, coverageType, commercialCoverageType, carValue]);
 
   // Private vehicle premium calculation
   const calculatePrivatePremium = useCallback((
@@ -335,6 +336,20 @@ export default function CalculatorPage() {
     "third-party": "Covers only damage or injury you cause to others.",
   };
 
+  const commercialCoverageDescriptions: Record<string, string> = {
+    comprehensive:
+      "Comprehensive: covers own vehicle damage, theft, fire, and third-party liabilities for commercial use.",
+    "third-party":
+      "Third Party Only: covers damage or injury you cause to others; your vehicle is not covered.",
+  };
+
+  const pvtLabelText = useMemo(() => {
+    if (calculatorType === "private") {
+      return "PVT (Free up to KSh 4,000,000, then 0.25%, min KSh 2,500)";
+    }
+    return "PVT (Free up to KSh 5,000,000, then 0.25%, min KSh 2,500)";
+  }, [calculatorType]);
+
   const handleCarValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawValue = e.target.value.replace(/,/g, ""); // remove commas
     if (rawValue === "") {
@@ -469,6 +484,9 @@ export default function CalculatorPage() {
                   <option value="comprehensive">Comprehensive</option>
                   <option value="third-party">Third Party Only</option>
                 </select>
+                <p className="mt-1 text-xs text-gray-600 italic">
+                  {commercialCoverageDescriptions[commercialCoverageType]}
+                </p>
               </div>
 
               {commercialCoverageType === "comprehensive" && (
@@ -770,7 +788,7 @@ export default function CalculatorPage() {
                   className="w-3 h-3 text-blue-600 border-gray-300 focus:ring-blue-500 focus:ring-1"
                 />
                 <label htmlFor="politicalTerrorismCover" className="ml-1 text-xs text-gray-700">
-                  Political & Terrorism Cover (Free up to KSh 5,000,000, then 0.25%)
+                  {pvtLabelText}
                 </label>
               </div>
             </div>
@@ -808,19 +826,19 @@ export default function CalculatorPage() {
                   Basic Premium
                   {calculatorType === "private" && coverageType === "comprehensive" && basicPremium! > 0 && carValue !== "" && (
                     <span className="text-gray-500 font-normal">
-                      {" "}({((basicPremium! / Number(carValue)) * 100).toFixed(1)}% of Car Value)
+                      {" "}({((basicPremium! / Number(carValue)) * 100).toFixed(1)}%)
                     </span>
                   )}
                   {calculatorType === "commercial" && commercialCoverageType === "comprehensive" && (
                     <span className="text-gray-500 font-normal">
-                      {" "}({fleetType === "fleet" ? "4.75" : "5.0"}% of Car Value)
+                      {" "}({fleetType === "fleet" ? "4.75" : "5.0"}%)
                     </span>
                   )}
                   {calculatorType === "psv" && (
-                    <span className="text-gray-500 font-normal"> {" "}(6.0% of Car Value)</span>
+                    <span className="text-gray-500 font-normal"> {" "}(6.0%)</span>
                   )}
                   {calculatorType === "tsv" && (
-                    <span className="text-gray-500 font-normal"> {" "}(5.5% of Car Value)</span>
+                    <span className="text-gray-500 font-normal"> {" "}(5.5%)</span>
                   )}
                   :
                 </span>
@@ -841,7 +859,7 @@ export default function CalculatorPage() {
                     />
                   </div>
                   <div className="flex justify-between">
-                    <span>Political/Terrorism Cover:</span>
+                    <span>PVT{isPvtInclusive ? " (Inclusive)" : ""}:</span>
                     <AnimatedValue
                       value={
                         additionalCovers.politicalTerrorism
@@ -870,7 +888,7 @@ export default function CalculatorPage() {
                     <AnimatedValue value={"KSh 0"} />
                   </div>
                   <div className="flex justify-between">
-                    <span>Political/Terrorism Cover{isPvtInclusive ? " (Inclusive)" : ""}:</span>
+                    <span>PVT{isPvtInclusive ? " (Inclusive)" : ""}:</span>
                     <AnimatedValue
                       value={
                         additionalCovers.politicalTerrorism
@@ -901,7 +919,7 @@ export default function CalculatorPage() {
                     />
                   </div>
                   <div className="flex justify-between">
-                    <span>Political/Terrorism Cover{isPvtInclusive ? " (Inclusive)" : ""}:</span>
+                    <span>PVT{isPvtInclusive ? " (Inclusive)" : ""}:</span>
                     <AnimatedValue
                       value={
                         additionalCovers.politicalTerrorism
@@ -919,12 +937,11 @@ export default function CalculatorPage() {
                 </>
               )}
 
-              {/** Show total basic premium only if there are additional covers */}
-              {(calculatorType === "private" && coverageType === "comprehensive" && 
-                (additionalCovers.excessProtector > 0 || additionalCovers.politicalTerrorism > 0 || additionalCovers.courtesyCar > 0)) && (
+              {/** Always show Total Basic Premium when any add-ons contribute for all calculator types */}
+              {(additionalCovers.excessProtector > 0 || additionalCovers.politicalTerrorism > 0 || additionalCovers.courtesyCar > 0 || additionalCovers.pll > 0) && (
               <div className="border-t border-gray-300 pt-2 flex justify-between font-bold">
                 <span>Total Basic Premium:</span>
-                <AnimatedValue value={formatKES(basicPremium! + additionalCovers.excessProtector + additionalCovers.politicalTerrorism + additionalCovers.courtesyCar)} />
+                  <AnimatedValue value={formatKES(basicPremium! + additionalCovers.excessProtector + additionalCovers.politicalTerrorism + additionalCovers.courtesyCar + additionalCovers.pll)} />
               </div>
               )}
 
