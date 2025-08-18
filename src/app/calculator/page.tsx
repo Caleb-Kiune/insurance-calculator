@@ -40,17 +40,19 @@ export default function CalculatorPage() {
 
     const numCarValue = Number(carValue);
 
-    let calculatedBasicPremium = 0;
+    let basePremium = 0;
+    let baseRate = 0;
     let excessProtectorCost = 0;
     let politicalTerrorismCost = 0;
     let courtesyCarCost = 0;
 
     if (coverageType === "third-party") {
       // Fixed premium for third party
-      calculatedBasicPremium = 7500;
+      basePremium = 7500;
+      baseRate = 0; // No percentage for third party
     } else {
       // Comprehensive logic
-      let baseRate = 0.05;
+      baseRate = 0.05;
       let valueMultiplier = 1;
 
       if (numCarValue >= 500_000 && numCarValue < 1_000_000) valueMultiplier = 1.2;
@@ -60,26 +62,25 @@ export default function CalculatorPage() {
 
       const finalRate = baseRate * valueMultiplier;
       const computedBasePremium = numCarValue * finalRate;
-      const basePremium = Math.max(computedBasePremium, 37_500);
+      basePremium = Math.max(computedBasePremium, 37_500);
+      baseRate = finalRate; // Store the actual rate used for display
 
       excessProtectorCost = excessProtector ? Math.max(numCarValue * 0.0025, 5000) : 0;
       politicalTerrorismCost =
         politicalTerrorismCover && numCarValue > 4_000_000 ? numCarValue * 0.0025 : 0;
       courtesyCarCost = courtesyCar === "10days" ? 4500 : courtesyCar === "20days" ? 7500 : 0;
-
-      calculatedBasicPremium =
-        basePremium + excessProtectorCost + politicalTerrorismCost + courtesyCarCost;
     }
 
+    const totalBasicPremium = basePremium + excessProtectorCost + politicalTerrorismCost + courtesyCarCost;
+
     const stampDuty = 40;
-    const trainingLevy = calculatedBasicPremium * 0.002;
-    const phcf = calculatedBasicPremium * 0.0025;
+    const trainingLevy = totalBasicPremium * 0.002;
+    const phcf = totalBasicPremium * 0.0025;
     const policyCharge = 1000;
 
-    const totalPremium =
-      calculatedBasicPremium + stampDuty + trainingLevy + phcf + policyCharge;
+    const totalPremium = totalBasicPremium + stampDuty + trainingLevy + phcf + policyCharge;
 
-    setBasicPremium(calculatedBasicPremium);
+    setBasicPremium(basePremium);
     setPremium(totalPremium);
     setAdditionalCovers({
       excessProtector: excessProtectorCost,
@@ -330,7 +331,15 @@ export default function CalculatorPage() {
           ) : (
             <div className="space-y-3 text-gray-900">
               <div className="flex justify-between">
-                <span>Basic Premium:</span>
+                <span>
+                  Basic Premium
+                  {coverageType === "comprehensive" && basicPremium! > 0 && carValue !== "" && (
+                    <span className="text-gray-500 font-normal">
+                      {" "}({((basicPremium! / Number(carValue)) * 100).toFixed(1)}% of Car Value)
+                    </span>
+                  )}
+                  :
+                </span>
                 <AnimatedValue value={formatKES(basicPremium!)} />
               </div>
               {coverageType === "comprehensive" && (
@@ -351,7 +360,7 @@ export default function CalculatorPage() {
                       value={
                         additionalCovers.politicalTerrorism
                           ? formatKES(additionalCovers.politicalTerrorism)
-                          : "Free"
+                          : "KSh 0"
                       }
                     />
                   </div>
@@ -367,7 +376,11 @@ export default function CalculatorPage() {
                   </div>
                 </>
               )}
-              <div className="border-t border-gray-300 pt-2 space-y-2">
+              <div className="border-t border-gray-300 pt-2 flex justify-between font-bold">
+                <span>Total Basic Premium:</span>
+                <AnimatedValue value={formatKES(basicPremium! + additionalCovers.excessProtector + additionalCovers.politicalTerrorism + additionalCovers.courtesyCar)} />
+              </div>
+              <div className="space-y-2">
                 <div className="flex justify-between">
                   <span>Stamp Duty:</span>
                   <AnimatedValue value={formatKES(levies.stampDuty)} />
